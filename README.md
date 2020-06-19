@@ -1,5 +1,5 @@
 # MKRImagePicker
-Pick an image or video in super easy way, no need to handle any permissions, it will handle all of them autometically.
+Pick an image or video in super easy way, no need to handle any permissions, it will handle all of them autometically. Just Copy the file and do the following actions.
 # Usage
 
     //MARK:- Private Properties
