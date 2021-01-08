@@ -1,6 +1,6 @@
 import Foundation
 import Photos
-
+import UIKit
 
 /**
  This Class manages all of your imagePicker permissions and delegates.
@@ -15,20 +15,17 @@ import Photos
  06/01/20
  
  - Version:
- 1.2
+ 1.3
  */
-class MKRImagePicker:NSObject{
+class MKRImagePicker:NSObject {
     //MARK:- Properties
     var imageDelegate:MKRImagePickerDelegate?
     var imagePicker:UIImagePickerController = UIImagePickerController()
     var sourceType          : [UIImagePickerController.SourceType] = []
     var allowsEditing       : Bool = false
-    var isVideoMode: Bool = false
-    var imageMinResolutionLimit: CGFloat = 684
-    private var controller: UIViewController?
     
     //MARK:- Initialization
-    private func initialize(){
+    private func initialize() {
         imagePicker.delegate = self
         imagePicker.allowsEditing = self.allowsEditing
     }
@@ -51,21 +48,18 @@ class MKRImagePicker:NSObject{
     func presentOn(viewController:UIViewController,
                    iPadSourceView:UIView = UIView(),
                    showVideos: Bool = false
-                   ){
-        self.controller = viewController
-        viewController.view.endEditing(true)
+                   ) {
         initialize()
-        if self.sourceType.count > 1{
+        if self.sourceType.count > 1 {
             let actionSheet = createActionSheet(Controller: viewController)
             if UIDevice.current.userInterfaceIdiom == .pad {
                 actionSheet.popoverPresentationController?.sourceView = iPadSourceView
                 actionSheet.popoverPresentationController?.sourceRect = CGRect(x: iPadSourceView.bounds.midX, y: iPadSourceView.bounds.midY, width: 0, height: 0)
             }
             viewController.present(actionSheet, animated: false)
-        }else if self.sourceType.count > 0{
+        } else if self.sourceType.count > 0{
             switch self.sourceType[0]{
             case .camera:
-               
                 checkCameraPermission(controller: viewController)
             case .photoLibrary:
                 if showVideos {imagePicker.mediaTypes = ["public.movie"]}
@@ -73,8 +67,10 @@ class MKRImagePicker:NSObject{
                 checkPhotoLibraryPermission(controller: viewController)
             case .savedPhotosAlbum:
                 checkSavedPhotoAlbumPermission(controller: viewController)
+            default:
+                break
             }
-        }else{
+        } else {
             let alertController = UIAlertController(title: "Alert!", message: "Please select a sourceType for ImagePicker", preferredStyle: .alert)
             
             let defaultAction = UIAlertAction(title: "OK", style: .default, handler: nil)
@@ -91,28 +87,9 @@ class MKRImagePicker:NSObject{
         switch status {
         case .authorized:
             openImagePickerHandler(sourceType: .photoLibrary, controller: controller)
-        case .denied, .restricted :
-            self.showDeniedAlert(title: "Permission Denied", message: "Please grant photo library permissions in Settings to continue using this service", controller: controller)
-            
-        case .notDetermined:
-            PHPhotoLibrary.requestAuthorization { (status) in
-                if status.rawValue == 3{
-                    self.openImagePickerHandler(sourceType: .photoLibrary, controller: controller)
-                }else{
-                    self.showDeniedAlert(title: "Permission Denied", message: "Please grant photo library permissions in Settings to continue using this service", controller: controller)
-                }
-            }
-        default:
-            break
-        }
-    }
-    
-    private func checkSavedPhotoAlbumPermission(controller:UIViewController) {
-        let status = PHPhotoLibrary.authorizationStatus()
-        switch status {
-        case .authorized:
-            openImagePickerHandler(sourceType: .savedPhotosAlbum, controller: controller)
-        case .denied, .restricted :
+        case .limited:
+            openImagePickerHandler(sourceType: .photoLibrary, controller: controller)
+        case .denied, .restricted:
             self.showDeniedAlert(title: "Permission Denied", message: "Please grant photo library permissions in Settings to continue using this service", controller: controller)
             
         case .notDetermined:
@@ -128,24 +105,47 @@ class MKRImagePicker:NSObject{
         }
     }
     
+    private func checkSavedPhotoAlbumPermission(controller:UIViewController) {
+        let status = PHPhotoLibrary.authorizationStatus()
+        switch status {
+        case .authorized:
+            openImagePickerHandler(sourceType: .savedPhotosAlbum, controller: controller)
+        case .limited:
+            openImagePickerHandler(sourceType: .savedPhotosAlbum, controller: controller)
+        case .denied, .restricted :
+            self.showDeniedAlert(title: "Permission Denied", message: "Please grant photo library permissions in Settings to continue using this service", controller: controller)
+        case .notDetermined:
+            PHPhotoLibrary.requestAuthorization { status in
+                if status.rawValue == 3 {
+                    self.openImagePickerHandler(sourceType: .photoLibrary, controller: controller)
+                } else {
+                    self.showDeniedAlert(title: "Permission Denied", message: "Please grant photo library permissions in Settings to continue using this service", controller: controller)
+                }
+            }
+        default:
+            break
+        }
+    }
+    
     //Checking Camera Permission
     private func checkCameraPermission(controller:UIViewController) {
         if AVCaptureDevice.authorizationStatus(for: .video) ==  .authorized {
-            
             openImagePickerHandler(sourceType: .camera, controller: controller)
-        }else {
+        } else  if AVCaptureDevice.authorizationStatus(for: .video) ==  .notDetermined {
             AVCaptureDevice.requestAccess(for: .video, completionHandler: { (granted) in
                 if granted {
                     self.openImagePickerHandler(sourceType: .camera, controller: controller)
-                }else {
+                } else {
                     self.showDeniedAlert(title: "Permission Denied", message: "Please grant camera permissions in Settings to continue using this service", controller: controller)
                 }
             })
+        } else {
+            self.showDeniedAlert(title: "Permission Denied", message: "Please grant camera permissions in Settings to continue using this service", controller: controller)
         }
     }
     
     //MARK:- Private functions
-    private func createActionSheet(Controller:UIViewController)->UIAlertController{
+    private func createActionSheet(Controller:UIViewController)->UIAlertController {
         let actionSheet = UIAlertController(title: "Choose Source Type", message: nil, preferredStyle: .actionSheet)
         for type in sourceType {
             switch type {
@@ -161,22 +161,21 @@ class MKRImagePicker:NSObject{
                 actionSheet.addAction(UIAlertAction(title: ButtonTitles.savedPhotos, style: .default){ (_) in
                     self.checkSavedPhotoAlbumPermission(controller: Controller)
                 })
+            default:
+                break
             }
         }
+        
         actionSheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         return actionSheet
         
     }
     
     private func openImagePickerHandler(sourceType:UIImagePickerController.SourceType,controller:UIViewController){
+        
         DispatchQueue.main.async {
-            if self.isVideoMode {
-                self.imagePicker.mediaTypes = ["public.movie"]
-                                      } else {
-                self.imagePicker.mediaTypes = ["public.image"]
-                                      }
-                       self.imagePicker.sourceType = sourceType
-                       self.imagePicker.allowsEditing = true
+            self.imagePicker.sourceType = sourceType
+            self.imagePicker.allowsEditing = true
             controller.present(self.imagePicker, animated: true, completion: {
                 self.imagePicker.navigationBar.topItem?.rightBarButtonItem?.isEnabled = true
             })
@@ -205,21 +204,6 @@ class MKRImagePicker:NSObject{
             controller.present(alert, animated: true)
         }
     }
-    
-    private func isValid(image: UIImage) -> Bool {
-        //Commented now as directed by Rohit Sir
-        /*
-        let imageWidth = image.size.width
-        let imageHeight = image.size.height
-        let minValue = min(imageWidth, imageHeight)
-        if minValue < imageMinResolutionLimit {
-            AlertUtility.showAlert(controller!, title: "Invalid Image!", message: "Please upload image with valid resolution 1024x684 OR 684x1024")
-            return false
-        }
-        */
-        
-        return true
-    }
 }
 
 //MARK:- ImagePicker Delegates
@@ -230,16 +214,18 @@ extension MKRImagePicker:UIImagePickerControllerDelegate,UINavigationControllerD
     }
     
     func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
-        imagePicker.dismiss(animated: true, completion: nil)
-        if let image = info[UIImagePickerController.InfoKey.editedImage] as? UIImage{
-            if isValid(image: image) {
-            imageDelegate?.imageSelectionSuccessful(selectedImage: image)
-            }
+        if let image = info[UIImagePickerController.InfoKey.editedImage] as? UIImage {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: { [weak self] in
+                self?.imageDelegate?.imageSelectionSuccessful(selectedImage: image)
+            })
+            
         }
         else if let mediaURL = info[UIImagePickerController.InfoKey.mediaURL] as? URL {
-            imageDelegate?.videoSelectionSuccessful(mediaURL: mediaURL)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: { [weak self] in
+                self?.imageDelegate?.videoSelectionSuccessful(mediaURL: mediaURL)
+            })
         }
-        
+        imagePicker.dismiss(animated: true, completion: nil)
     }
 }
 
