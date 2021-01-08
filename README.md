@@ -10,12 +10,12 @@ Pick an image or video in super easy way, no need to handle any permissions, it 
         return imagePicker
     }()
     
-    @IBAction func editProfileButtonTapped(_ sender: UIButton) {
+    @IBAction func editImageButtonTapped(_ sender: UIButton) {
         imagePicker.presentOn(viewController: self)
     }
     
     //MARK:- ImagePicker Delegates
-    extension MCMEditProfileViewController:MKRImagePickerDelegate{
+    extension SomeController:MKRImagePickerDelegate{
     
     func imageSelectionSuccessful(selectedImage: UIImage) {
         userProfilePicture.image = selectedImage
